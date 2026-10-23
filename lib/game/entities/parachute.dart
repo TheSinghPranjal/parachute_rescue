@@ -146,9 +146,7 @@ class Parachute extends PositionComponent {
       Rect.fromLTWH(w * 0.12, top - 4, w * 0.4, h + 8),
       Doodle.fill(const Color(0x14000000)),
     );
-    canvas.restore();
-
-    // Gore seams and outline.
+    // Gore seams, kept inside the clip so they never poke past the dome.
     final seam = Doodle.stroke(Doodle.ink, 1.6);
     for (var i = 1; i < gores; i++) {
       final x = -w / 2 + w * i / gores;
@@ -159,6 +157,9 @@ class Parachute extends PositionComponent {
         seam,
       );
     }
+    canvas.restore();
+
+    // Outline.
     canvas.drawPath(dome, Doodle.stroke(Doodle.ink, 2.6));
     canvas.restore();
   }

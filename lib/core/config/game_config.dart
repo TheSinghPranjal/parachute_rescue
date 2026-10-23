@@ -83,6 +83,7 @@ class WindConfig {
     this.maxStrength = 900,
     this.gustDuration = 0.7,
     this.maxActiveGusts = 3,
+    this.reach = 90,
   });
 
   /// Drags shorter than this are treated as taps, never wind.
@@ -94,6 +95,10 @@ class WindConfig {
   final double maxStrength;
   final double gustDuration;
   final int maxActiveGusts;
+
+  /// A swipe only pushes the person whose body or canopy lies within this
+  /// distance of the swipe path.
+  final double reach;
 }
 
 class LandingConfig {

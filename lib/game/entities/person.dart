@@ -132,7 +132,7 @@ class Person extends PositionComponent with HasGameReference<RescueGame> {
     final cfg = game.config;
     final prevFeet = feetY;
     var prevX = body.x;
-    body.step(dt, game.wind.acceleration, cfg.physics);
+    body.step(dt, game.wind.accelerationFor(this), cfg.physics);
     if (body.applyEdges(cfg.world.width, size.x / 2, cfg.physics.edgeRule)) {
       // Don't sweep a deck test across the whole screen after a wrap.
       prevX = body.x;

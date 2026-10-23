@@ -207,6 +207,31 @@ void main() {
       },
     );
 
+    testWithGame<RescueGame>(
+      'a swipe only pushes the person nearest to it',
+      quietGame,
+      (game) async {
+        final near = game.debugSpawnPerson(200, 300);
+        final far = game.debugSpawnPerson(600, 300);
+        await game.ready();
+        near.deploy();
+        far.deploy();
+        final gust = game.handleSwipe(
+          Vector2(120, 300),
+          Vector2(280, 300),
+          0.15,
+        );
+        expect(gust, isNotNull);
+        expect(game.wind.accelerationFor(near), greaterThan(0));
+        expect(game.wind.accelerationFor(far), 0);
+        // Nobody within reach: no gust at all.
+        expect(
+          game.handleSwipe(Vector2(380, 700), Vector2(460, 700), 0.15),
+          isNull,
+        );
+      },
+    );
+
     testWithGame<RescueGame>('a tiny drag is not wind', quietGame, (
       game,
     ) async {
@@ -481,9 +506,10 @@ void main() {
           final deck = game.landingSpaces.first;
           final dx = deck.position.x - target.body.x;
           if (dx.abs() > 40) {
+            final at = Vector2(target.body.x, target.body.y);
             game.handleSwipe(
-              Vector2(300, 600),
-              Vector2(300 + dx.sign * 120, 600),
+              at - Vector2(dx.sign * 60, 0),
+              at + Vector2(dx.sign * 60, 0),
               0.12,
             );
             swipeCooldown = 0.6;

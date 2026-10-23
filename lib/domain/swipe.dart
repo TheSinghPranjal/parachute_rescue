@@ -2,10 +2,14 @@ import '../core/config/game_config.dart';
 
 /// A directional push of wind created by one swipe.
 class Gust {
-  Gust({required this.strength, required this.duration}) : remaining = duration;
+  Gust({required this.strength, required this.duration, this.target})
+    : remaining = duration;
 
   /// Signed horizontal acceleration in u/s² (negative = left).
   final double strength;
+
+  /// The only body this gust pushes, or null to push everyone.
+  final Object? target;
   final double duration;
   double remaining;
 
@@ -26,6 +30,7 @@ Gust? gustFromSwipe({
   required double dy,
   required double seconds,
   required WindConfig cfg,
+  Object? target,
 }) {
   if (dx.isNaN || dy.isNaN || seconds.isNaN) return null;
   final distanceSq = dx * dx + dy * dy;
@@ -39,7 +44,11 @@ Gust? gustFromSwipe({
     cfg.minStrength,
     cfg.maxStrength,
   );
-  return Gust(strength: dx.sign * magnitude, duration: cfg.gustDuration);
+  return Gust(
+    strength: dx.sign * magnitude,
+    duration: cfg.gustDuration,
+    target: target,
+  );
 }
 
 /// Owns the active gusts and sums their acceleration.
@@ -56,10 +65,20 @@ class WindField {
     _gusts.add(gust);
   }
 
+  /// Summed acceleration of every active gust, regardless of target.
   double get acceleration {
     var sum = 0.0;
     for (final g in _gusts) {
       sum += g.acceleration;
+    }
+    return sum.clamp(-cfg.maxStrength, cfg.maxStrength);
+  }
+
+  /// Acceleration felt by [body]: untargeted gusts plus those aimed at it.
+  double accelerationFor(Object body) {
+    var sum = 0.0;
+    for (final g in _gusts) {
+      if (g.target == null || identical(g.target, body)) sum += g.acceleration;
     }
     return sum.clamp(-cfg.maxStrength, cfg.maxStrength);
   }

@@ -50,7 +50,7 @@ class _HowToPlayScreenState extends ConsumerState<HowToPlayScreen> {
     ),
     const _Step(
       'SWIPE FOR WIND',
-      'Swipe left or right anywhere to blow a gust. It pushes everyone in the air.',
+      'Swipe left or right next to someone to blow a gust. It only pushes them.',
       _paintSwipe,
     ),
     const _Step(

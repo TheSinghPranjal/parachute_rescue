@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flame/components.dart';
@@ -372,7 +373,7 @@ class RescueGame extends FlameGame {
     for (final p in _people.where((p) => p.isAirborne)) {
       final dx = deck.position.x - p.body.x;
       if (dx.abs() > 30) {
-        wind.add(Gust(strength: dx.sign * 380, duration: 0.5));
+        wind.add(Gust(strength: dx.sign * 380, duration: 0.5, target: p));
         break;
       }
     }
@@ -417,17 +418,21 @@ class RescueGame extends FlameGame {
     return null;
   }
 
-  /// Converts a finished swipe (world coordinates) into a gust.
+  /// Converts a finished swipe (world coordinates) into a gust aimed at the
+  /// airborne person nearest the swipe path. Returns null when the drag is
+  /// not a swipe or nobody is within reach of it.
   Gust? handleSwipe(Vector2 start, Vector2 end, double seconds) {
     if (!isPlaying || attractMode) return null;
     final d = end - start;
+    final target = _nearestToSwipe(start, end);
     final gust = gustFromSwipe(
       dx: d.x,
       dy: d.y,
       seconds: seconds,
       cfg: config.wind,
+      target: target,
     );
-    if (gust == null) return null;
+    if (gust == null || target == null) return null;
     wind.add(gust);
     world.add(
       WindLines(
@@ -438,6 +443,38 @@ class RescueGame extends FlameGame {
     );
     audio.play(Sfx.wind, volume: 0.6);
     return gust;
+  }
+
+  /// The airborne person whose hurt area is closest to the segment
+  /// [start]→[end], or null if none is within [WindConfig.reach].
+  Person? _nearestToSwipe(Vector2 start, Vector2 end) {
+    Person? best;
+    var bestDist = config.wind.reach;
+    for (final p in _people) {
+      if (!p.isAirborne) continue;
+      final dist = _segmentToRectDistance(start, end, p.hurtRect);
+      if (dist <= bestDist) {
+        bestDist = dist;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  static double _segmentToRectDistance(Vector2 a, Vector2 b, Rect r) {
+    // Sampling is plenty precise at swipe scale and keeps this simple.
+    const samples = 24;
+    var min = double.infinity;
+    for (var i = 0; i <= samples; i++) {
+      final t = i / samples;
+      final x = a.x + (b.x - a.x) * t;
+      final y = a.y + (b.y - a.y) * t;
+      final dx = x < r.left ? r.left - x : (x > r.right ? x - r.right : 0.0);
+      final dy = y < r.top ? r.top - y : (y > r.bottom ? y - r.bottom : 0.0);
+      final dist = math.sqrt(dx * dx + dy * dy);
+      if (dist < min) min = dist;
+    }
+    return min;
   }
 
   /// Converts a point on the game widget into world coordinates.
