@@ -88,6 +88,19 @@ void main() {
     expect(small.lives, 4);
   });
 
+  test('hazard bonus can earn an extra life', () {
+    final small = ScoreBook(const ScoringConfig(extraLifeEvery: 200));
+    small.destroyHazard(1, 250);
+    expect(small.lives, small.cfg.initialLives + 1);
+  });
+
+  test('each run gets its own token on its result', () {
+    final first = book.result(seconds: 0, terrainId: 'ocean').run;
+    expect(book.result(seconds: 1, terrainId: 'ocean').run, same(first));
+    book.reset();
+    expect(book.result(seconds: 0, terrainId: 'ocean').run, isNot(same(first)));
+  });
+
   test('hazard bonus is awarded once per hazard', () {
     expect(book.destroyHazard(9, 250), 250);
     expect(book.destroyHazard(9, 250), isNull);

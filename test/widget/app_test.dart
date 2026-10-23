@@ -184,6 +184,38 @@ void main() {
       expect(session.subscriptionCount, 0);
     });
 
+    testWidgets('pausing saves progress so quitting mid-run keeps it', (
+      tester,
+    ) async {
+      final storage = MemoryStorageService({StorageKeys.tutorialDone: true});
+      final game = await startGame(tester, storage);
+      game.scoreBook.rescue(9001); // +100 points, +1 coin
+      await tester.tap(find.byTooltip('Pause'));
+      await tester.pump();
+      expect(storage.values[StorageKeys.bestScore], 100);
+      expect(storage.values[StorageKeys.coins], 1);
+
+      // Pausing again (e.g. app backgrounded twice) never re-counts coins.
+      await tester.tap(find.text('RESUME'));
+      await frames(tester, 0.2);
+      game.pause();
+      await tester.pump();
+      expect(storage.values[StorageKeys.coins], 1);
+
+      // The run then ends: only coins earned since the pause are added, and
+      // it still counts as a new best for the game-over card.
+      await tester.tap(find.text('RESUME'));
+      game.scoreBook.rescue(9002);
+      for (var i = 0; i < 3; i++) {
+        game.debugSpawnPerson(60.0 + i * 10, 1040, deployed: true);
+      }
+      await frames(tester, 2);
+      expect(game.state.value, SessionState.gameOver);
+      expect(find.byKey(const Key('new-best')), findsOneWidget);
+      expect(storage.values[StorageKeys.coins], 2);
+      expect(storage.values[StorageKeys.bestScore], game.scoreBook.score);
+    });
+
     testWidgets('restart from pause resets the run', (tester) async {
       final game = await startGame(
         tester,

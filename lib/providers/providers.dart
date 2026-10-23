@@ -160,9 +160,18 @@ class ProgressNotifier extends Notifier<Progress> {
 
   static const _freeSkins = {'classic', 'plain'};
 
+  // Per-run bookkeeping so a run banked on pause and again at game over
+  // never double-counts coins, and "new best" compares against the best from
+  // before the run started.
+  Object? _run;
+  int _runCoinsBanked = 0;
+  int _bestBeforeRun = 0;
+
   @override
   Progress build() {
     final s = ref.watch(storageProvider);
+    _run = null;
+    _runCoinsBanked = 0;
     return Progress(
       bestScore: s.getInt(StorageKeys.bestScore, 0).clamp(0, 1 << 31),
       coins: s.getInt(StorageKeys.coins, 0).clamp(0, 1 << 31),
@@ -173,19 +182,29 @@ class ProgressNotifier extends Notifier<Progress> {
     );
   }
 
-  /// Banks a finished run. Writes to disk once per result.
-  /// Returns true if it set a new best score.
+  /// Banks a run's totals so far: on pause (incl. the app going to the
+  /// background) and at game over. Safe to call repeatedly for the same run;
+  /// only new coins are added. Writes to disk only when something changed.
+  /// Returns true if the run beat the best score from before it started.
   Future<bool> recordResult(GameResult result) async {
-    final newBest = result.score > state.bestScore;
-    state = state.copyWith(
-      bestScore: newBest ? result.score : state.bestScore,
-      coins: state.coins + result.coinsEarned,
-    );
-    if (newBest) await _store.setInt(StorageKeys.bestScore, state.bestScore);
-    if (result.coinsEarned > 0) {
-      await _store.setInt(StorageKeys.coins, state.coins);
+    final sameRun = result.run != null && identical(result.run, _run);
+    if (!sameRun) {
+      _run = result.run;
+      _runCoinsBanked = 0;
+      _bestBeforeRun = state.bestScore;
     }
-    return newBest;
+    final newCoins = (result.coinsEarned - _runCoinsBanked).clamp(0, 1 << 31);
+    _runCoinsBanked += newCoins;
+    final raisesBest = result.score > state.bestScore;
+    state = state.copyWith(
+      bestScore: raisesBest ? result.score : state.bestScore,
+      coins: state.coins + newCoins,
+    );
+    if (raisesBest) {
+      await _store.setInt(StorageKeys.bestScore, state.bestScore);
+    }
+    if (newCoins > 0) await _store.setInt(StorageKeys.coins, state.coins);
+    return result.score > _bestBeforeRun;
   }
 
   Future<void> selectTerrain(String id) async {
@@ -287,6 +306,14 @@ class GameSessionController extends Notifier<SessionSummary> {
           result: this.state.result,
           newBest: this.state.newBest,
         );
+        // Pausing covers every way out of a live run (pause button, back,
+        // app backgrounded/closed), so progress is saved before it can be lost.
+        final game = _game;
+        if (state == SessionState.paused && game != null) {
+          await ref
+              .read(progressProvider.notifier)
+              .recordResult(game.snapshot());
+        }
         if (state == SessionState.playing) {
           this.state = const SessionSummary(state: SessionState.playing);
         }

@@ -14,6 +14,7 @@ class GameResult {
     required this.coinsEarned,
     required this.survivalSeconds,
     required this.terrainId,
+    this.run,
   });
 
   final int score;
@@ -24,6 +25,10 @@ class GameResult {
   final int coinsEarned;
   final double survivalSeconds;
   final String terrainId;
+
+  /// Identifies the run this snapshot came from, so a run banked part-way
+  /// (on pause) and again at game over only counts its coins once.
+  final Object? run;
 
   double get rescueRate {
     final total = rescued + lost;
@@ -65,6 +70,9 @@ class ScoreBook {
   late int lost;
   late int hazardsDestroyed;
   late int coins;
+
+  /// Fresh token per run; see [GameResult.run].
+  late Object run;
   bool _gameOver = false;
   int _nextExtraLifeAt = 0;
   final Set<int> _resolvedPeople = {};
@@ -81,6 +89,7 @@ class ScoreBook {
     lost = 0;
     hazardsDestroyed = 0;
     coins = 0;
+    run = Object();
     _gameOver = false;
     _nextExtraLifeAt = cfg.extraLifeEvery;
     _resolvedPeople.clear();
@@ -170,5 +179,6 @@ class ScoreBook {
         coinsEarned: coins,
         survivalSeconds: seconds,
         terrainId: terrainId,
+        run: run,
       );
 }

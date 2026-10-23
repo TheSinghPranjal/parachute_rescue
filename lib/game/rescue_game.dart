@@ -489,6 +489,7 @@ class RescueGame extends FlameGame {
       HazardKind.ufo => config.hazards.ufoBonus,
       HazardKind.thundercloud => 0,
     };
+    final livesBefore = scoreBook.lives;
     final awarded = scoreBook.destroyHazard(h.id, bonus);
     world.add(Explosion(at: h.position.clone()));
     if (awarded == null) return;
@@ -499,6 +500,19 @@ class RescueGame extends FlameGame {
         color: const Color(0xFFFF9F43),
       ),
     );
+    // A hazard bonus can cross the extra-life threshold too.
+    if (scoreBook.lives > livesBefore) {
+      world.add(
+        ScorePopup(
+          at: h.position + Vector2(0, -38),
+          text: '+1 LIFE',
+          color: const Color(0xFFE8504F),
+          fontSize: 24,
+        ),
+      );
+      lives.value = scoreBook.lives;
+      _emit(LifeCountChanged(scoreBook.lives));
+    }
     score.value = scoreBook.score;
     _emit(HazardDestroyed(kind: h.kind, bonus: awarded));
   }
@@ -597,11 +611,12 @@ class RescueGame extends FlameGame {
     if (ended) _endGame();
   }
 
+  /// The current run's totals so far.
+  GameResult snapshot() =>
+      scoreBook.result(seconds: director.elapsed, terrainId: terrain.id);
+
   void _endGame() {
-    final result = scoreBook.result(
-      seconds: director.elapsed,
-      terrainId: terrain.id,
-    );
+    final result = snapshot();
     lastResult = result;
     _setState(SessionState.gameOver);
     audio.stopMusic();
