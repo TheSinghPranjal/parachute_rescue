@@ -8,6 +8,7 @@ class SkyRescueApp extends StatelessWidget {
 
   final Widget home;
 
+
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'Sky Rescue Panic',
