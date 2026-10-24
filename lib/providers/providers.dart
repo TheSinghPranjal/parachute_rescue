@@ -24,7 +24,14 @@ final audioProvider = Provider<AudioService>((ref) => SilentAudioService());
 
 final hapticsProvider = Provider<HapticsService>((ref) => HapticsService());
 
-final gameConfigProvider = Provider<GameConfig>((ref) => const GameConfig());
+/// Gameplay tuning with the player's chosen drop speed applied.
+final gameConfigProvider = Provider<GameConfig>((ref) {
+  const base = GameConfig();
+  final level = ref.watch(settingsProvider.select((s) => s.dropSpeed));
+  return base.copyWith(
+    physics: base.physics.withFallSpeed(DropSpeed.multiplier(level)),
+  );
+});
 
 // ------------------------------------------------------------ settings ----
 
@@ -34,6 +41,7 @@ class Settings {
     required this.music,
     required this.haptics,
     required this.tutorialDone,
+    this.dropSpeed = DropSpeed.normal,
   });
 
   final bool sfx;
@@ -41,16 +49,21 @@ class Settings {
   final bool haptics;
   final bool tutorialDone;
 
+  /// How fast people fall, [DropSpeed.min]..[DropSpeed.max].
+  final int dropSpeed;
+
   Settings copyWith({
     bool? sfx,
     bool? music,
     bool? haptics,
     bool? tutorialDone,
+    int? dropSpeed,
   }) => Settings(
     sfx: sfx ?? this.sfx,
     music: music ?? this.music,
     haptics: haptics ?? this.haptics,
     tutorialDone: tutorialDone ?? this.tutorialDone,
+    dropSpeed: dropSpeed ?? this.dropSpeed,
   );
 }
 
@@ -65,10 +78,14 @@ class SettingsNotifier extends Notifier<Settings> {
       music: s.getBool(StorageKeys.music, true),
       haptics: s.getBool(StorageKeys.haptics, true),
       tutorialDone: s.getBool(StorageKeys.tutorialDone, false),
+      dropSpeed: _validSpeed(s.getInt(StorageKeys.dropSpeed, DropSpeed.normal)),
     );
     _applyToServices(settings);
     return settings;
   }
+
+  static int _validSpeed(int v) =>
+      v >= DropSpeed.min && v <= DropSpeed.max ? v : DropSpeed.normal;
 
   void _applyToServices(Settings s) {
     final audio = ref.read(audioProvider);
@@ -97,6 +114,13 @@ class SettingsNotifier extends Notifier<Settings> {
   Future<void> setHaptics(bool v) async {
     _set(state.copyWith(haptics: v));
     await _store.setBool(StorageKeys.haptics, v);
+  }
+
+  Future<void> setDropSpeed(int level) async {
+    final v = level.clamp(DropSpeed.min, DropSpeed.max);
+    if (v == state.dropSpeed) return;
+    _set(state.copyWith(dropSpeed: v));
+    await _store.setInt(StorageKeys.dropSpeed, v);
   }
 
   Future<void> setTutorialDone(bool v) async {

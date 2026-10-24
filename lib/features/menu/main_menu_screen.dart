@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
+import '../../core/config/game_config.dart';
 import '../../core/utils/random_source.dart';
 import '../../game/entities/parachute.dart';
 import '../../game/entities/person.dart';
@@ -191,6 +192,7 @@ class _AttractBackdrop extends StatefulWidget {
 
 class _AttractBackdropState extends State<_AttractBackdrop> {
   late final RescueGame _game = RescueGame(
+    config: const GameConfig().fittedTo(MediaQuery.sizeOf(context)),
     terrain: widget.terrain,
     skins: widget.skins,
     attractMode: true,

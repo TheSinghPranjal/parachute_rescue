@@ -259,7 +259,7 @@ class TerrainBackdrop extends PositionComponent {
         for (final x in [30.0, 110.0, w - 50]) {
           _mangrove(canvas, Offset(x, g));
         }
-        for (var i = 0; i < 5; i++) {
+        for (var i = 0; i <= (w - 360) ~/ 90; i++) {
           Doodle.inked(
             canvas,
             Doodle.blob(Offset(170.0 + i * 90, g - 4), 22, 6, seed: 260 + i),
@@ -477,7 +477,7 @@ class GroundLayer extends PositionComponent {
       case GroundStyle.swamp:
         for (var row = 0; row < 5; row++) {
           final y = groundY + 40 + row * 36.0;
-          for (var i = 0; i < 6; i++) {
+          for (var i = 0; i < ((w + 80) / 140).ceil(); i++) {
             final x =
                 (i * 140.0 + row * 60 + _clock * (row.isEven ? 14 : -10)) %
                     (w + 80) -
@@ -496,7 +496,7 @@ class GroundLayer extends PositionComponent {
           }
         }
         if (theme.ground == GroundStyle.swamp) {
-          for (var i = 0; i < 6; i++) {
+          for (var i = 0; i < ((w - 60) / 120).ceil(); i++) {
             Doodle.inked(
               canvas,
               Doodle.blob(
@@ -512,7 +512,7 @@ class GroundLayer extends PositionComponent {
         }
       case GroundStyle.dirt:
         // Craters and rocks.
-        for (var i = 0; i < 5; i++) {
+        for (var i = 0; i < ((w - 80) / 140).ceil(); i++) {
           final c = Offset(80.0 + i * 140, groundY + 60 + (i % 2) * 70);
           canvas.drawOval(
             Rect.fromCenter(center: c, width: 70, height: 18),
@@ -544,7 +544,7 @@ class GroundLayer extends PositionComponent {
           );
         }
       case GroundStyle.snow:
-        for (var i = 0; i < 4; i++) {
+        for (var i = 0; i < ((w - 110) / 170).ceil(); i++) {
           final c = Offset(110.0 + i * 170, groundY + 80 + (i % 2) * 60);
           canvas.drawOval(
             Rect.fromCenter(center: c, width: 90, height: 24),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
+import '../../core/config/game_config.dart';
 import '../../providers/providers.dart';
 import 'how_to_play_screen.dart';
 
@@ -113,6 +114,11 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
             const SizedBox(height: 18),
+            _DropSpeedPicker(
+              level: s.dropSpeed,
+              onChanged: (v) => unawaited(n.setDropSpeed(v)),
+            ),
+            const SizedBox(height: 18),
             DoodleButton(
               label: 'REPLAY TUTORIAL',
               icon: Icons.school_rounded,
@@ -170,4 +176,108 @@ class SettingsScreen extends ConsumerWidget {
       style: const TextStyle(fontFamily: AppFonts.display, fontSize: 20),
     ),
   );
+}
+
+/// Five-step drop-speed control: − / + buttons around a row of pips.
+class _DropSpeedPicker extends StatelessWidget {
+  const _DropSpeedPicker({required this.level, required this.onChanged});
+
+  final int level;
+  final ValueChanged<int> onChanged;
+
+  static const _labels = {
+    1: 'Very slow',
+    2: 'Slow',
+    3: 'Normal',
+    4: 'Fast',
+    5: 'Very fast',
+  };
+
+  Widget _step(IconData icon, String tooltip, int to, Key key) {
+    final enabled = to >= DropSpeed.min && to <= DropSpeed.max;
+    return Opacity(
+      opacity: enabled ? 1 : 0.35,
+      child: DoodleIconButton(
+        key: key,
+        icon: icon,
+        tooltip: tooltip,
+        size: 44,
+        onPressed: () {
+          if (enabled) onChanged(to);
+        },
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
+      decoration: doodleBox(radius: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.speed_rounded, color: AppColors.ink),
+              const SizedBox(width: 16),
+              const Expanded(
+                child: Text(
+                  'Drop speed',
+                  style: TextStyle(fontFamily: AppFonts.display, fontSize: 20),
+                ),
+              ),
+              Text(
+                _labels[level]!,
+                key: const Key('drop-speed-label'),
+                style: const TextStyle(fontSize: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _step(
+                Icons.remove_rounded,
+                'Slower',
+                level - 1,
+                const Key('drop-speed-down'),
+              ),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    for (var i = DropSpeed.min; i <= DropSpeed.max; i++)
+                      GestureDetector(
+                        onTap: () => onChanged(i),
+                        child: Container(
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i <= level
+                                ? AppColors.orange
+                                : AppColors.paper,
+                            border: Border.all(
+                              color: AppColors.ink,
+                              width: 2.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              _step(
+                Icons.add_rounded,
+                'Faster',
+                level + 1,
+                const Key('drop-speed-up'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

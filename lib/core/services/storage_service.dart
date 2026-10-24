@@ -25,6 +25,7 @@ abstract final class StorageKeys {
   static const music = 'music_enabled';
   static const haptics = 'haptics_enabled';
   static const tutorialDone = 'tutorial_done';
+  static const dropSpeed = 'drop_speed';
   static const terrain = 'terrain_id';
   static const ownedSkins = 'owned_skins';
   static const chuteSkin = 'chute_skin';

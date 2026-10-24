@@ -28,15 +28,18 @@ class GameplayScreen extends ConsumerStatefulWidget {
 }
 
 class _GameplayScreenState extends ConsumerState<GameplayScreen> {
-  late final RescueGame game;
+  // Created once the screen size is known, so the world can fit its width.
+  RescueGame? _game;
+  RescueGame get game => _game!;
   late final GameSessionController _session;
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_game != null) return;
     final progress = ref.read(progressProvider);
-    game = RescueGame(
-      config: ref.read(gameConfigProvider),
+    final game = _game = RescueGame(
+      config: ref.read(gameConfigProvider).fittedTo(MediaQuery.sizeOf(context)),
       terrain: progress.terrain,
       skins: progress.skins,
       audio: ref.read(audioProvider),

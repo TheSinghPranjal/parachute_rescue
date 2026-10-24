@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parachute_rescue/app/app.dart';
+import 'package:parachute_rescue/core/config/game_config.dart';
 import 'package:parachute_rescue/core/services/audio_service.dart';
 import 'package:parachute_rescue/core/services/storage_service.dart';
 import 'package:parachute_rescue/domain/scoring.dart';
@@ -259,6 +260,51 @@ void main() {
     expect(storage.values, isEmpty);
   });
 
+  testWidgets('drop speed steps between 1 and 5 and persists', (tester) async {
+    final storage = MemoryStorageService();
+    final c = await pumpApp(tester, storage: storage);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Normal'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('drop-speed-up')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('drop-speed-up')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('drop-speed-up')));
+    await tester.pump();
+    expect(find.text('Very fast'), findsOneWidget);
+    expect(storage.values[StorageKeys.dropSpeed], DropSpeed.max);
+    expect(
+      c.read(gameConfigProvider).physics.chuteDescent,
+      const PhysicsConfig().chuteDescent * DropSpeed.multiplier(DropSpeed.max),
+    );
+
+    for (var i = 0; i < 5; i++) {
+      await tester.tap(find.byKey(const Key('drop-speed-down')));
+      await tester.pump();
+    }
+    expect(find.text('Very slow'), findsOneWidget);
+    expect(storage.values[StorageKeys.dropSpeed], DropSpeed.min);
+  });
+
+  testWidgets('gameplay world widens to fill a tablet screen', (tester) async {
+    await pumpApp(
+      tester,
+      storage: MemoryStorageService({StorageKeys.tutorialDone: true}),
+    );
+    // A 3:4 tablet in portrait.
+    tester.view.physicalSize = const Size(1536, 2048);
+    tester.view.devicePixelRatio = 2;
+    await tester.pump();
+    await tapKey(tester, 'play-button');
+    await frames(tester, 0.3);
+    final world = liveGame(tester).config.world;
+    expect(world.width, closeTo(960, 0.01));
+    expect(world.height, 1280);
+  });
+
   test('progress: best score saved only when beaten, coins banked', () async {
     final storage = MemoryStorageService();
     final c = ProviderContainer(
@@ -312,5 +358,22 @@ void main() {
     expect(c.read(settingsProvider).sfx, isTrue);
     expect(c.read(progressProvider).bestScore, 0);
     expect(c.read(progressProvider).terrainId, 'ocean');
+    expect(c.read(settingsProvider).dropSpeed, DropSpeed.normal);
+  });
+
+  test('out-of-range stored drop speed falls back to normal', () {
+    final c = ProviderContainer(
+      overrides: [
+        storageProvider.overrideWithValue(
+          MemoryStorageService({StorageKeys.dropSpeed: 9}),
+        ),
+      ],
+    );
+    addTearDown(c.dispose);
+    expect(c.read(settingsProvider).dropSpeed, DropSpeed.normal);
+    expect(
+      c.read(gameConfigProvider).physics.gravity,
+      const PhysicsConfig().gravity,
+    );
   });
 }

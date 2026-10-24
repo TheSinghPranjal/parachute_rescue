@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:parachute_rescue/core/config/game_config.dart';
 import 'package:parachute_rescue/domain/fall_physics.dart';
@@ -135,4 +137,32 @@ void main() {
       expect(substeps(-1, cfg).count, 0);
     });
   });
+
+  test('drop speed levels scale vertical fall only', () {
+    const base = PhysicsConfig();
+    expect(DropSpeed.multiplier(DropSpeed.normal), 1);
+    expect(DropSpeed.multiplier(0), DropSpeed.multiplier(DropSpeed.min));
+    expect(DropSpeed.multiplier(9), DropSpeed.multiplier(DropSpeed.max));
+    for (var l = DropSpeed.min; l < DropSpeed.max; l++) {
+      expect(DropSpeed.multiplier(l + 1), greaterThan(DropSpeed.multiplier(l)));
+    }
+    final fast = base.withFallSpeed(1.4);
+    expect(fast.gravity, closeTo(base.gravity * 1.4, 1e-9));
+    expect(fast.freeFallTerminal, closeTo(base.freeFallTerminal * 1.4, 1e-9));
+    expect(fast.chuteDescent, closeTo(base.chuteDescent * 1.4, 1e-9));
+    expect(fast.openingDuration, base.openingDuration);
+    expect(fast.maxHorizontalSpeed, base.maxHorizontalSpeed);
+  });
+
+  test(
+    'world fits wide screens, never narrower than default or over square',
+    () {
+      const w = WorldConfig();
+      expect(w.fittedTo(const Size(768, 1024)).width, closeTo(960, 1e-9));
+      expect(w.fittedTo(const Size(390, 844)).width, w.width);
+      expect(w.fittedTo(const Size(1024, 768)).width, w.height);
+      expect(w.fittedTo(Size.zero).width, w.width);
+      expect(w.fittedTo(const Size(768, 1024)).groundY, w.groundY);
+    },
+  );
 }

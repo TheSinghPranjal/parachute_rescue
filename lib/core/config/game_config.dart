@@ -2,6 +2,9 @@
 /// none of them hard-code physics, scoring or difficulty numbers.
 library;
 
+import 'dart:math' as math;
+import 'dart:ui' show Size;
+
 /// What happens when a parachutist drifts past a side edge.
 enum EdgeRule { wrap, clamp }
 
@@ -23,6 +26,37 @@ class WorldConfig {
 
   /// The waterline / ground surface. Crossing it unrescued means "lost".
   final double groundY;
+
+  /// Widens the world to match [screen]'s aspect ratio so wide screens
+  /// (tablets) fill edge to edge instead of pillarboxing. Never narrower than
+  /// [width] nor wider than square; taller screens still letterbox.
+  WorldConfig fittedTo(Size screen) {
+    if (screen.isEmpty) return this;
+    final fitted = (height * screen.width / screen.height)
+        .clamp(width, math.max(width, height))
+        .toDouble();
+    return WorldConfig(
+      width: fitted,
+      height: height,
+      planeLaneY: planeLaneY,
+      skyTop: skyTop,
+      skyBottom: skyBottom,
+      groundY: groundY,
+    );
+  }
+}
+
+/// Player-selectable drop speed: level [min] (slowest) to [max] (fastest).
+abstract final class DropSpeed {
+  static const min = 1;
+  static const max = 5;
+  static const normal = 3;
+
+  static const _multipliers = [0.6, 0.8, 1.0, 1.2, 1.4];
+
+  /// Fall-speed multiplier for [level]; out-of-range levels are clamped.
+  static double multiplier(int level) =>
+      _multipliers[level.clamp(min, max) - min];
 }
 
 class PhysicsConfig {
@@ -73,6 +107,24 @@ class PhysicsConfig {
   final double maxSubstep;
 
   final EdgeRule edgeRule;
+
+  /// A copy whose vertical fall (gravity, free-fall terminal and canopy
+  /// descent) is scaled by [m]. Timing such as canopy opening is unchanged.
+  PhysicsConfig withFallSpeed(double m) => PhysicsConfig(
+    gravity: gravity * m,
+    freeFallTerminal: freeFallTerminal * m,
+    chuteDescent: chuteDescent * m,
+    chuteRelaxRate: chuteRelaxRate,
+    openingDuration: openingDuration,
+    freeFallWindFactor: freeFallWindFactor,
+    chuteWindFactor: chuteWindFactor,
+    freeFallDrag: freeFallDrag,
+    chuteDrag: chuteDrag,
+    maxHorizontalSpeed: maxHorizontalSpeed,
+    maxFrameDt: maxFrameDt,
+    maxSubstep: maxSubstep,
+    edgeRule: edgeRule,
+  );
 }
 
 class WindConfig {
@@ -310,4 +362,19 @@ class GameConfig {
   final ScoringConfig scoring;
   final HazardConfig hazards;
   final DifficultyConfig difficulty;
+
+  GameConfig copyWith({WorldConfig? world, PhysicsConfig? physics}) =>
+      GameConfig(
+        world: world ?? this.world,
+        physics: physics ?? this.physics,
+        wind: wind,
+        landing: landing,
+        scoring: scoring,
+        hazards: hazards,
+        difficulty: difficulty,
+      );
+
+  /// This config with its world fitted to [screen] (see
+  /// [WorldConfig.fittedTo]).
+  GameConfig fittedTo(Size screen) => copyWith(world: world.fittedTo(screen));
 }
