@@ -15,5 +15,6 @@ class SkyRescueApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     theme: buildTheme(),
     home: home,
+
   );
 }
