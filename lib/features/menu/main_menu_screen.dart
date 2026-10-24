@@ -215,13 +215,13 @@ class _Title extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 OutlinedLabel(
-                  'SKY RESCUE',
+                  'PARACHUTE',
                   size: 50,
                   color: AppColors.yellow,
                   stroke: 9,
                 ),
                 OutlinedLabel(
-                  'PANIC!',
+                  'RESCUE!',
                   size: 58,
                   color: AppColors.blue,
                   stroke: 9,

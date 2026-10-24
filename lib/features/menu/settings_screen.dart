@@ -141,7 +141,7 @@ class SettingsScreen extends ConsumerWidget {
               padding: const EdgeInsets.all(14),
               decoration: doodleBox(radius: 18),
               child: const Text(
-                'Sky Rescue Panic\n'
+                'Parachute Rescue\n'
                 'An original doodle arcade game built with Flutter, Flame and Riverpod. '
                 'All art is drawn in code; sound effects are synthesized originals.\n'
                 'Fonts: Lilita One & Patrick Hand (SIL Open Font License).',

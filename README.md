@@ -1,4 +1,4 @@
-# Sky Rescue Panic
+# Parachute Rescue
 
 An original, hand-drawn doodle arcade game for Android and iOS. Tap falling stick figures to open their parachutes, swipe to blow wind, and land them on the moving deck while dodging helicopters, UFOs, and lightning.
 

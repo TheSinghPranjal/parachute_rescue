@@ -11,7 +11,7 @@ class SkyRescueApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Sky Rescue Panic',
+    title: 'Parachute Rescue',
     debugShowCheckedModeBanner: false,
     theme: buildTheme(),
     home: home,

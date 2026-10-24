@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="Sky Rescue Panic"
+        android:label="Parachute Rescue"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
