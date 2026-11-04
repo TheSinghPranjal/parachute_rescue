@@ -27,6 +27,28 @@ To regenerate the synthesized sound effects:
 python3 tool/gen_sfx.py assets/audio
 ```
 
+## Production deploy
+
+The **Production Deploy** workflow (`.github/workflows/deploy.yml`) uploads a release app bundle to the Play production track. It runs only when started by hand: Actions → Production Deploy → Run workflow. It has no inputs and does not run on push.
+
+Create these repository secrets before the first run:
+
+| Secret | Value |
+|---|---|
+| `KEYSTORE_BASE64` | Base64-encoded upload keystore. The job writes it to `android/app/keystore/upload-keystore.jks`. |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Upload key alias |
+| `KEY_PASSWORD` | Upload key password |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT` | Play service-account JSON, pasted as raw text |
+
+`android/app/build.gradle.kts` sets `applicationId` to `com.the_lazy_bear_club.parachute_rescue`. That has to be the same package as the Play listing.
+
+`pubspec.yaml` is `1.0.0+2`, so the first run commits `1.0.0+3` and uploads version code 3. Play rejects a version code it already has. If the listing is already at 3 or higher, set the `+build` number above that code and run the workflow again.
+
+If the upload fails with "The caller does not have permission", the Play service account has no release access to this app. Grant it under Users and permissions in Play Console. A version code that is already on Play fails the same step; run the workflow again after the build number is higher.
+
+This app does not use AdMob, and there are no ad-unit ids to replace.
+
 ## Dependencies
 
 | Package | Version | Note |

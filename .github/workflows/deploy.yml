@@ -1,0 +1,366 @@
+# Manual production deploy. workflow_dispatch only: the version-bump commit
+# is pushed to main, and a push trigger would start another deploy.
+name: Production Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One production upload at a time. Do not cancel a run that may already be
+# talking to Play; a second dispatch waits, then bumps the next build number.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Play production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Stable is not pinned. Flutter 3.47.9 (Dart 3.13.7, current stable)
+      # analyzes clean and builds the release app bundle. The app was created
+      # with 3.41.5; stable is ahead of that and still builds. A later stable
+      # may reject Gradle 8.14 / AGP 8.11.1 / Kotlin 2.2.20 — Flutter already
+      # warns that those will be dropped.
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2.23.0
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve packages
+        run: flutter pub get
+
+      # This app has no AdMob dependency, no ad-unit ids, and no release
+      # validation script, so there is no ads check to run.
+
+      - name: Read applicationId
+        id: package
+        run: |
+          set -euo pipefail
+          # >>> read_application_id
+          gradle_file=android/app/build.gradle.kts
+          line=$(grep -E '^[[:space:]]*applicationId[[:space:]]*=' "$gradle_file" | head -n 1 || true)
+          package_name=$(printf '%s' "$line" | sed -E 's/.*"([^"]+)".*/\1/')
+          if [[ -z "$line" || "$package_name" == "$line" || ! "$package_name" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$ ]]; then
+            echo "::error::Could not read applicationId from ${gradle_file} (got '${package_name}')."
+            exit 1
+          fi
+          echo "package_name=${package_name}" >> "${GITHUB_OUTPUT:?}"
+          printf 'applicationId %s\n' "$package_name"
+          # <<< read_application_id
+
+      - name: Bump pubspec build number
+        id: version
+        run: |
+          set -euo pipefail
+          # >>> bump_pubspec
+          pubspec=pubspec.yaml
+          if [[ ! -f "$pubspec" ]]; then
+            echo "::error::pubspec.yaml not found."
+            exit 1
+          fi
+          version_lines=$(grep -cE '^version:' "$pubspec" || true)
+          if [[ "$version_lines" -ne 1 ]]; then
+            echo "::error::Expected exactly one version: line in pubspec.yaml (found ${version_lines})."
+            exit 1
+          fi
+          raw=$(grep -E '^version:' "$pubspec")
+          value=${raw#version:}
+          value=${value%%#*}
+          value=$(printf '%s' "$value" | tr -d '\r' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [[ "$value" == \"*\" || "$value" == \'*\' ]]; then
+            value=${value:1:${#value}-2}
+          fi
+          if [[ "$value" != *"+"* ]]; then
+            echo "::error::pubspec version '${value}' is missing the +build suffix. Expected <name>+<positive integer>, for example 1.0.0+2."
+            exit 1
+          fi
+          if [[ "$value" == *"+"*"+"* ]]; then
+            echo "::error::pubspec version '${value}' has more than one '+'. Expected a single +build suffix."
+            exit 1
+          fi
+          build_name=${value%+*}
+          build_number=${value#*+}
+          if [[ -z "$build_name" ]]; then
+            echo "::error::pubspec version '${value}' has an empty name before '+'."
+            exit 1
+          fi
+          if [[ ! "$build_name" =~ ^[0-9A-Za-z][0-9A-Za-z.+-]*$ ]]; then
+            echo "::error::Version name '${build_name}' contains characters this workflow will not commit."
+            exit 1
+          fi
+          if [[ ! "$build_number" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Build number '${build_number}' is missing or not a positive integer. The +build part must be a positive integer such as 2."
+            exit 1
+          fi
+          new_build=$(awk -v n="$build_number" 'BEGIN { printf "%d", n + 1 }')
+          new_version="${build_name}+${new_build}"
+          tmp=$(mktemp)
+          awk -v repl="version: ${new_version}" '
+            !done && /^version:/ { print repl; done = 1; next }
+            { print }
+          ' "$pubspec" > "$tmp"
+          mv "$tmp" "$pubspec"
+          {
+            echo "build_name=${build_name}"
+            echo "build_number=${new_build}"
+            echo "version=${new_version}"
+          } >> "${GITHUB_OUTPUT:?}"
+          printf 'Bumped pubspec version to %s\n' "$new_version"
+          # <<< bump_pubspec
+
+      - name: Commit version bump
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- pubspec.yaml
+          # >>> assert_staged
+          mapfile -t staged < <(git diff --cached --name-only)
+          if [[ ${#staged[@]} -ne 1 ]]; then
+            echo "::error::The version commit must stage only pubspec.yaml (staged ${#staged[@]} files)."
+            git diff --cached --name-only
+            exit 1
+          fi
+          if [[ "${staged[0]}" != "pubspec.yaml" ]]; then
+            echo "::error::The version commit must stage only pubspec.yaml, not ${staged[0]}."
+            exit 1
+          fi
+          # <<< assert_staged
+          git commit -m "chore: bump version to ${NEW_VERSION}"
+          git push origin HEAD:main
+
+      # flutter pub get on newer stable (3.47) rewrites analysis_options.yaml
+      # ("Upgrading analysis_options.yaml to exclude build and platform
+      # directories") and pubspec.lock. The first real run of this pipeline in
+      # Undercover failed because the clean-tree check treated those as errors.
+      # Ignore that output. Fail if anything else is dirty.
+      - name: Check the tree is clean apart from flutter pub get
+        run: |
+          set -euo pipefail
+          # >>> check_clean_tree
+          allowed() {
+            case "$1" in
+              pubspec.lock | analysis_options.yaml | .metadata | .flutter-plugins | .flutter-plugins-dependencies | .packages | ios/Flutter/Generated.xcconfig | ios/Flutter/flutter_export_environment.sh)
+                return 0
+                ;;
+              */GeneratedPluginRegistrant.* | */generated_plugin_registrant.* | */generated_plugins.cmake)
+                return 0
+                ;;
+              *)
+                return 1
+                ;;
+            esac
+          }
+          unexpected=0
+          # --untracked-files=all lists each new file. Default porcelain
+          # collapses an untracked directory into one line ("?? linux/"),
+          # which would hide a generated file the allowlist already names.
+          while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
+            path=${line:3}
+            if [[ "$path" == *" -> "* ]]; then
+              echo "::error::Unexpected rename in the worktree: ${line}"
+              unexpected=1
+              continue
+            fi
+            if ! allowed "$path"; then
+              echo "::error::Dirty file was not produced by flutter pub get: ${path}"
+              unexpected=1
+            fi
+          done < <(git status --porcelain --untracked-files=all)
+          if [[ "$unexpected" -ne 0 ]]; then
+            echo "::error::The worktree has changes other than pubspec.yaml (already committed) and flutter pub get output. pubspec.lock and analysis_options.yaml are ignored; anything else fails the deploy."
+            git status --porcelain --untracked-files=all
+            exit 1
+          fi
+          # <<< check_clean_tree
+
+      - name: Restore upload keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${KEYSTORE_BASE64}" ]]; then
+            echo "::error::KEYSTORE_BASE64 is empty."
+            exit 1
+          fi
+          mkdir -p android/app/keystore
+          umask 077
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > android/app/keystore/upload-keystore.jks
+          if [[ ! -s android/app/keystore/upload-keystore.jks ]]; then
+            echo "::error::KEYSTORE_BASE64 decoded to an empty keystore."
+            exit 1
+          fi
+
+      - name: Write android/key.properties
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${KEYSTORE_PASSWORD}" || -z "${KEY_PASSWORD}" || -z "${KEY_ALIAS}" ]]; then
+            echo "::error::KEYSTORE_PASSWORD, KEY_PASSWORD, and KEY_ALIAS must all be set."
+            exit 1
+          fi
+          umask 077
+          # storeFile is absolute. android/app/build.gradle.kts loads
+          # rootProject.file("key.properties") and passes storeFile to file(),
+          # which keeps an absolute path absolute.
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          def prop(value: str) -> str:
+              return (
+                  value.replace("\\", "\\\\")
+                  .replace("\n", "\\n")
+                  .replace("\r", "\\r")
+                  .replace("\t", "\\t")
+              )
+
+          store_file = (
+              Path(os.environ["GITHUB_WORKSPACE"])
+              / "android/app/keystore/upload-keystore.jks"
+          )
+          text = (
+              f"storePassword={prop(os.environ['KEYSTORE_PASSWORD'])}\n"
+              f"keyPassword={prop(os.environ['KEY_PASSWORD'])}\n"
+              f"keyAlias={prop(os.environ['KEY_ALIAS'])}\n"
+              f"storeFile={store_file}\n"
+          )
+          Path("android/key.properties").write_text(text)
+          PY
+
+      # android/gradle.properties asks for -Xmx8G, MaxMetaspaceSize=4G, and
+      # ReservedCodeCacheSize=512m (about 12.5 GB of JVM limits). This repo is
+      # public, so ubuntu-latest has 16 GB; a private repo's ubuntu-latest has
+      # 8 GB. Those ceilings do not fit in 8 GB and leave too little room on
+      # 16 GB once the OS, Kotlin daemon, and native linkers are counted.
+      # Rewrite the file for this job only. The version commit already
+      # happened, and nothing commits this edit.
+      - name: Cap Gradle heap for the hosted runner
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          path = Path("android/gradle.properties")
+          lines = path.read_text().splitlines()
+          idx = next(
+              (i for i, line in enumerate(lines) if line.startswith("org.gradle.jvmargs=")),
+              None,
+          )
+          if idx is None:
+              print("No org.gradle.jvmargs line; leaving Gradle defaults.")
+              sys.exit(0)
+          line = lines[idx]
+
+          def to_mb(raw: str, unit: str) -> int:
+              size = int(raw)
+              unit = unit.lower()
+              if unit == "g":
+                  return size * 1024
+              if unit == "m":
+                  return size
+              if unit == "k":
+                  return max(1, size // 1024)
+              sys.exit(f"Unrecognised memory unit in org.gradle.jvmargs: {unit}")
+
+          def flag_mb(pattern: str) -> int:
+              match = re.search(pattern, line)
+              if not match:
+                  return 0
+              return to_mb(match.group(1), match.group(2))
+
+          total = (
+              flag_mb(r"-Xmx(\d+)([gGmMkK])")
+              + flag_mb(r"-XX:MaxMetaspaceSize=(\d+)([gGmMkK])")
+              + flag_mb(r"-XX:ReservedCodeCacheSize=(\d+)([gGmMkK])")
+          )
+          # 6 GB of JVM limits still leaves RAM for the OS on an 8 GB runner.
+          limit_mb = 6 * 1024
+          print(f"Configured Gradle JVM limits total {total} MiB (cap {limit_mb} MiB).")
+          if total <= limit_mb:
+              print("Within the hosted-runner cap; gradle.properties was not changed.")
+              sys.exit(0)
+          lines[idx] = (
+              "org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=1G "
+              "-XX:ReservedCodeCacheSize=256m -XX:+HeapDumpOnOutOfMemoryError"
+          )
+          if not any(item.startswith("kotlin.daemon.jvmargs=") for item in lines):
+              lines.append("kotlin.daemon.jvmargs=-Xmx1G")
+          path.write_text("\n".join(lines) + "\n")
+          print("Capped Gradle heap for this job only. This edit is not committed.")
+          PY
+
+      - name: Build release app bundle
+        env:
+          BUILD_NAME: ${{ steps.version.outputs.build_name }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          flutter build appbundle --release \
+            --build-name="$BUILD_NAME" \
+            --build-number="$BUILD_NUMBER"
+
+      - name: Verify the bundle with bundletool and keytool
+        env:
+          BUILD_NAME: ${{ steps.version.outputs.build_name }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+          PACKAGE_NAME: ${{ steps.package.outputs.package_name }}
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o "${RUNNER_TEMP}/bundletool.jar" \
+            https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar
+          aab=build/app/outputs/bundle/release/app-release.aab
+          version_code=$(java -jar "${RUNNER_TEMP}/bundletool.jar" dump manifest --bundle="$aab" --xpath /manifest/@android:versionCode)
+          version_name=$(java -jar "${RUNNER_TEMP}/bundletool.jar" dump manifest --bundle="$aab" --xpath /manifest/@android:versionName)
+          package=$(java -jar "${RUNNER_TEMP}/bundletool.jar" dump manifest --bundle="$aab" --xpath /manifest/@package)
+          printf 'bundle versionCode=%s versionName=%s package=%s\n' "$version_code" "$version_name" "$package"
+          if [[ "$version_code" != "$BUILD_NUMBER" || "$version_name" != "$BUILD_NAME" || "$package" != "$PACKAGE_NAME" ]]; then
+            echo "::error::Bundle manifest does not match the bumped version or applicationId. Expected ${PACKAGE_NAME} ${BUILD_NAME}+${BUILD_NUMBER}."
+            exit 1
+          fi
+          cert=$(keytool -printcert -jarfile "$aab")
+          printf '%s\n' "$cert"
+          if printf '%s\n' "$cert" | grep -q "CN=Android Debug"; then
+            echo "::error::The app bundle is debug-signed. Release signing did not use the upload keystore."
+            exit 1
+          fi
+
+      - name: Upload to Google Play production
+        id: play
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT }}
+          packageName: ${{ steps.package.outputs.package_name }}
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          track: production
+          status: completed
+
+      - name: Explain a Play upload failure
+        if: failure() && steps.play.outcome == 'failure'
+        run: |
+          cat <<'EOF'
+          An upload failure can mean either (a) "The caller does not have permission": the Play service account has no release access to this app under Users and permissions in Play Console, or (b) a version code already on Play, in which case run again.
+          EOF
