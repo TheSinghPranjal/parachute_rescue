@@ -55,6 +55,7 @@ class OutlinedLabel extends StatelessWidget {
     this.size = 28,
     this.color = Colors.white,
     this.stroke = 5,
+    this.strokeColor = AppColors.ink,
     this.textAlign = TextAlign.center,
   });
 
@@ -62,6 +63,7 @@ class OutlinedLabel extends StatelessWidget {
   final double size;
   final Color color;
   final double stroke;
+  final Color strokeColor;
   final TextAlign textAlign;
 
   @override
@@ -86,7 +88,7 @@ class OutlinedLabel extends StatelessWidget {
                   ..style = PaintingStyle.stroke
                   ..strokeWidth = stroke
                   ..strokeJoin = StrokeJoin.round
-                  ..color = AppColors.ink,
+                  ..color = strokeColor,
               ),
             ),
           ),
